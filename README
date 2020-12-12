@@ -1,0 +1,23 @@
+vlab-faas-server manages the state of various docker containers currently running student's programs. There are a few
+constraints which the server must follow...
+
+* The student's files are stored on a separate volume, which must be mounted to each container to run.
+* Each container should listen on a unique port. An nginx reverse proxy will route requests to each container.
+* The containers should not have to restart for a student to see their changes
+* A container may see lots of activity for a short period of time (a class period), but then may not be used for a long time.
+  We may want to evict containers after a certain period of time, and pull from a private registry whenever the container
+  is needed again.
+* The student should not need to interact with any system configuration. While we may want to allow the student to ssh
+  into a container (future), all they will need to do is tell the server what command should be used to start their program.
+
+/
+    GET - get server information
+
+/admin/<container id>
+    GET - get data about this container
+    POST - create a new container or update an existing one
+    DELETE - deletes the container
+
+/container/<container id>
+    * - inform the server that this container has received a request and route the request to the container. Upon receiving
+        a response, we route it back to the user
