@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/sh
 
 walk_dir() {
 	for pathname in "$1"/*; do
@@ -15,3 +15,5 @@ walk_dir() {
 # build all docker images in the assets/dockerfiles/ directory
 walk_dir "../assets/dockerfiles"
 
+# Create a network
+docker network create app-network

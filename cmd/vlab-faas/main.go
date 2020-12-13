@@ -2,26 +2,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/docker/docker/client"
 	"github.com/robfig/cron/v3"
 	"net/http"
-	"os"
 	"time"
 	"vlab-faas-server/internal"
 )
 
 func main() {
-
-	// TODO determine correct opts
-	docker, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	var err error
+	internal.G, err = internal.ParseArgs()
 	if err != nil {
 		panic(err)
-	}
-
-	internal.G = &internal.Global{
-		ContainerMgr: &internal.ContainerManager{},
-		Logger:       &internal.Logger{},
-		Docker:       docker,
 	}
 
 	mux := &internal.RegexMux{
@@ -32,6 +23,7 @@ func main() {
 	// Set up http handlers
 	mux.Handle("/admin/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.AdminHandler{}))
 	mux.Handle("/container/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.ContainerHandler{}))
+	mux.Handle("/status/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.StatusHandler{}))
 	mux.Handle("/", internal.G.Logger.LogRequestFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			internal.HTTPError(w, "Unsupported method", 400)
@@ -63,12 +55,12 @@ func main() {
 		panic(err)
 	}
 
-	// Start accepting connections
 	jobs.Start()
 
-	_, _ = fmt.Println("Listening for requests on port " + os.Getenv("PORT"))
+	// Start accepting connections
+	_, _ = fmt.Println("Listening for requests on " + internal.G.Addr)
 
-	err = http.ListenAndServe(":"+os.Getenv("PORT"), mux)
+	err = http.ListenAndServe(internal.G.Addr, mux)
 	if err != nil {
 		panic(err)
 	}

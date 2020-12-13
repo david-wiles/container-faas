@@ -21,3 +21,7 @@ constraints which the server must follow...
 /container/<container id>
     * - inform the server that this container has received a request and route the request to the container. Upon receiving
         a response, we route it back to the user
+
+/status/<container id>
+    POST - informs the server that the specified container is running. Should not be used by any client other than
+           the container itself

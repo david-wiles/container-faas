@@ -42,7 +42,7 @@ func (mgr *ContainerManager) get(id string) (*containerInstance, error) {
 	if c, ok := mgr.containers[id]; ok {
 		return c, nil
 	} else {
-		return nil, &mgrError{nil, "Container already exists", mgrErrorExists}
+		return nil, &mgrError{nil, "Container not found", mgrErrorExists}
 	}
 }
 
@@ -50,7 +50,7 @@ func (mgr *ContainerManager) create(id string, n containerInstance) (*containerI
 	if _, ok := mgr.containers[id]; !ok {
 		c := &containerInstance{
 			Id:          id,
-			Volume:      n.Volume,
+			Dir:         n.Dir,
 			Environment: n.Environment,
 			FrontendUrl: n.FrontendUrl,
 			BackendUrl:  n.BackendUrl,
@@ -83,7 +83,7 @@ func (mgr *ContainerManager) updateOrCreate(id string, n containerInstance) *con
 	} else {
 		mgr.containers[id] = &containerInstance{
 			Id:          id,
-			Volume:      n.Volume,
+			Dir:         n.Dir,
 			Environment: n.Environment,
 		}
 	}

@@ -23,13 +23,16 @@ func (h AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (AdminHandler) get(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Path
+	id := strings.TrimLeft(r.URL.Path, "/admin/")
+
 	c, err := G.ContainerMgr.get(id)
 	if err != nil {
 		if ContainerNotFound(err) {
+			G.Logger.Warning(err.Error())
 			HTTPError(w, err.Error(), 404)
 			return
 		} else {
+			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
 			return
 		}
@@ -37,6 +40,7 @@ func (AdminHandler) get(w http.ResponseWriter, r *http.Request) {
 
 	b, err := json.Marshal(c)
 	if err != nil {
+		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return
 	}
@@ -49,15 +53,15 @@ func (AdminHandler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 type containerPostRequest struct {
-	ContainerId string   `json:"ContainerId"`
-	Volume      string   `json:"Volume"`
+	Image       string   `json:"Image"`
+	Dir         string   `json:"Dir"`
 	Environment []string `json:"Environment"`
 }
 
 func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	reqBody := &containerPostRequest{}
-	id := r.URL.Path
+	id := strings.TrimLeft(r.URL.Path, "/admin/")
 
 	defer r.Body.Close()
 	decoder := json.NewDecoder(r.Body)
@@ -70,17 +74,9 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	// Create container entry
 	tmp := containerInstance{
-		Volume: reqBody.Volume,
-	}
-
-	// Get container if exists and update
-	if len(reqBody.Environment) > 0 {
-		for _, env := range reqBody.Environment {
-			entry := strings.Split(env, "=")
-			if len(entry) == 2 {
-				tmp.Environment[entry[0]] = entry[1]
-			}
-		}
+		Image:       reqBody.Image,
+		Dir:         reqBody.Dir,
+		Environment: reqBody.Environment,
 	}
 	c, err := G.ContainerMgr.create(id, tmp)
 	if err != nil {
@@ -114,14 +110,16 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 }
 
 func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Path
+	id := strings.TrimLeft(r.URL.Path, "/admin/")
 
 	c, err := G.ContainerMgr.get(id)
 	if err != nil {
 		if ContainerNotFound(err) {
+			G.Logger.Warning(err.Error())
 			HTTPError(w, err.Error(), 404)
 			return
 		} else {
+			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
 			return
 		}
@@ -130,6 +128,7 @@ func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
 	if c.IsRunning {
 		err = stopContainer(c)
 		if err != nil {
+			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
 			return
 		}
@@ -137,12 +136,14 @@ func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
 
 	err = removeContainer(c)
 	if err != nil {
+		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return
 	}
 
 	err = G.ContainerMgr.delete(id)
 	if err != nil {
+		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return
 	}

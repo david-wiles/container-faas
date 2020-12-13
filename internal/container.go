@@ -7,19 +7,20 @@ import (
 )
 
 type containerInstance struct {
-	Id string `json:"Id"`
+	Id             string    `json:"Id"`             // Unique ID for this container instance. Matches the id used in ContainerMgr
+	LastInvocation time.Time `json:"LastInvocation"` // Time of the last container invocation
+	IsRunning      bool      `json:"IsRunning"`      // Indicates whether a docker container is currently running
 
-	LastInvocation time.Time `json:"LastInvocation"`
-	IsRunning      bool      `json:"IsRunning"`
+	Image       string   `json:"Image"`       // Name of the image to use when creating this container
+	DockerID    string   `json:"DockerId"`    // Docker ID, obtained once a container has been created
+	Dir         string   `json:"Dir"`         // Directory of the app files on the server
+	Environment []string `json:"Environment"` // Any environment variables
 
-	DockerID    string            `json:"DockerId"`
-	Volume      string            `json:"Volume"`
-	Environment map[string]string `json:"Environment"`
+	FrontendUrl url.URL `json:"FrontendUrl"` // User-facing or proxy-facing url
+	BackendUrl  url.URL `json:"BackendUrl"`  // The URL of the container, used within the docker network
 
-	Port        int     `json:"Port"`
-	FrontendUrl url.URL `json:"FrontendUrl"`
-	BackendUrl  url.URL `json:"BackendUrl"`
-	NginxConf   string  `json:"NginxConf"`
+	Port      int    `json:"Port"`      // The port that nginx will use in the server block for this container
+	NginxConf string `json:"NginxConf"` // The file containing the .conf file for this container
 
-	proxy *httputil.ReverseProxy
+	proxy *httputil.ReverseProxy // Instance of a reverse proxy facing the docker container
 }
