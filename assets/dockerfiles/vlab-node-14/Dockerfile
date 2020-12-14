@@ -3,6 +3,8 @@ FROM node:14-alpine
 # The program files will be mounted at /home/app
 WORKDIR /home/app
 
+STOPSIGNAL SIGTERM
+
 COPY ./docker-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["docker-entrypoint.sh"]
 

@@ -47,9 +47,6 @@ func (AdminHandler) get(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(b)
-
-	// Just get info about the container
-	_, _ = fmt.Fprintln(w, "container admin get")
 }
 
 type containerPostRequest struct {
@@ -75,6 +72,7 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 	// Create container entry
 	tmp := containerInstance{
 		Image:       reqBody.Image,
+		DockerName:  id,
 		Dir:         reqBody.Dir,
 		Environment: reqBody.Environment,
 	}
@@ -93,13 +91,14 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO make this configurable
-	// Write new nginx configuration
-	err = writeNginxConf("/etc/nginx/apps/new.conf", c.Port, c.FrontendUrl.String())
-	if err != nil {
-		G.Logger.LogError(err)
-		HTTPError(w, "Could not write Nginx configuration file: "+err.Error(), 500)
-		return
+	if G.UseNginx {
+		// Write new nginx configuration
+		err = writeNginxConf(c.NginxConf, c.Port, c.FrontendUrl.String())
+		if err != nil {
+			G.Logger.LogError(err)
+			HTTPError(w, "Could not write Nginx configuration file: "+err.Error(), 500)
+			return
+		}
 	}
 
 	G.Logger.Info("Successfully built container")
@@ -126,16 +125,14 @@ func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if c.IsRunning {
-		err = stopContainer(c)
-		if err != nil {
+		if err = stopContainer(c); err != nil {
 			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
 			return
 		}
 	}
 
-	err = removeContainer(c)
-	if err != nil {
+	if err = removeContainer(c); err != nil {
 		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return

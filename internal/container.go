@@ -13,6 +13,7 @@ type containerInstance struct {
 
 	Image       string   `json:"Image"`       // Name of the image to use when creating this container
 	DockerID    string   `json:"DockerId"`    // Docker ID, obtained once a container has been created
+	DockerName  string   `json:"DockerName"`  // Unique name of the container. Should match the Id in most cases
 	Dir         string   `json:"Dir"`         // Directory of the app files on the server
 	Environment []string `json:"Environment"` // Any environment variables
 

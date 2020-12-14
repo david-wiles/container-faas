@@ -10,6 +10,10 @@ constraints which the server must follow...
 * The student should not need to interact with any system configuration. While we may want to allow the student to ssh
   into a container (future), all they will need to do is tell the server what command should be used to start their program.
 
+To start the server without the nginx reverse proxy:
+docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 5000:5000 --network app-network --name vlab vlab-server
+
+
 /
     GET - get server information
 
@@ -25,3 +29,4 @@ constraints which the server must follow...
 /status/<container id>
     POST - informs the server that the specified container is running. Should not be used by any client other than
            the container itself
+

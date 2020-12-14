@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"os"
 )
@@ -18,6 +19,7 @@ const (
 	dockerErrorRemove          dockerErrorType = 4
 	dockerErrorNetworkCreate   dockerErrorType = 5
 	dockerErrorImageBuild      dockerErrorType = 6
+	dockerErrorContainerList   dockerErrorType = 7
 )
 
 type dockerError struct {
@@ -58,7 +60,7 @@ func createContainer(c *containerInstance) error {
 			Binds: []string{
 				c.Dir + ":/home/app",
 			},
-		}, nil, nil, "")
+		}, nil, nil, c.DockerName)
 	if err != nil {
 		return &dockerError{err, "Could not create docker container", dockerErrorContainerCreate}
 	}
@@ -120,4 +122,22 @@ func buildImage(file string) error {
 	}
 
 	return nil
+}
+
+func getContainerName(id string) ([]string, error) {
+	ctx := context.Background()
+
+	containers, err := G.Docker.ContainerList(ctx, types.ContainerListOptions{
+		All:     true,
+		Filters: filters.NewArgs(filters.Arg("id", id)),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(containers) > 1 {
+		return nil, &dockerError{nil, "Id passed is not unique", dockerErrorContainerList}
+	}
+
+	return containers[0].Names, nil
 }

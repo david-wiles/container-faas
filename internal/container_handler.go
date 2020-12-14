@@ -2,6 +2,7 @@ package internal
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -9,9 +10,15 @@ import (
 type ContainerHandler struct{}
 
 func (i ContainerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimLeft(r.URL.Path, "/container/")
+	parts := strings.Split(r.URL.Path, "/")
 
-	c, err := G.ContainerMgr.get(id)
+	if len(parts) < 3 {
+		G.Logger.Warning("Invalid request: " + r.URL.Path)
+		HTTPError(w, "Container not found", 4040)
+		return
+	}
+
+	c, err := G.ContainerMgr.get(parts[2])
 	if err != nil {
 		if ContainerNotFound(err) {
 			G.Logger.Warning(err.Error())
@@ -52,6 +59,15 @@ func (i ContainerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	c.LastInvocation = time.Now()
 
+	// Rewrite path and pass to proxy
+	urlRewrite, err := url.Parse(strings.TrimRight(r.URL.String(), "/container/"+c.Id))
+	if err != nil {
+		G.Logger.LogError(err)
+		HTTPError(w, err.Error(), 500)
+		return
+	}
+
+	r.URL = urlRewrite
 	c.proxy.ServeHTTP(w, r)
 }
 

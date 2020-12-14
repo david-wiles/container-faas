@@ -2,6 +2,7 @@ package internal
 
 import (
 	"net/http/httputil"
+	"net/url"
 	"time"
 )
 
@@ -48,14 +49,26 @@ func (mgr *ContainerManager) get(id string) (*containerInstance, error) {
 
 func (mgr *ContainerManager) create(id string, n containerInstance) (*containerInstance, error) {
 	if _, ok := mgr.containers[id]; !ok {
+		backendUrl, err := url.Parse("http://" + n.DockerName + ":8080")
+		if err != nil {
+			return nil, err
+		}
+
+		frontendUrl, err := url.Parse("http://" + G.Addr + "/container/" + id)
+		if err != nil {
+			return nil, err
+		}
+
 		c := &containerInstance{
 			Id:          id,
+			Image:       n.Image,
+			DockerName:  n.DockerName,
 			Dir:         n.Dir,
 			Environment: n.Environment,
-			FrontendUrl: n.FrontendUrl,
-			BackendUrl:  n.BackendUrl,
+			FrontendUrl: *frontendUrl,
+			BackendUrl:  *backendUrl,
 		}
-		httputil.NewSingleHostReverseProxy(&c.BackendUrl)
+		c.proxy = httputil.NewSingleHostReverseProxy(&c.BackendUrl)
 
 		mgr.containers[id] = c
 	} else {
@@ -98,7 +111,7 @@ func (mgr *ContainerManager) exists(id string) bool {
 
 func (mgr *ContainerManager) delete(id string) error {
 	if _, ok := mgr.containers[id]; ok {
-		mgr.containers[id] = nil
+		delete(mgr.containers, id)
 	} else {
 		return &mgrError{nil, "Container not found", mgrErrorNotFound}
 	}
