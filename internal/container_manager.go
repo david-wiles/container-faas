@@ -119,6 +119,23 @@ func (mgr *ContainerManager) delete(id string) error {
 	return nil
 }
 
+// Reset all docker-related attributes. This should be used in the case of an error to
+// prevent the program from getting stuck in a bad state inconsistent with Docker
+func (mgr *ContainerManager) reset(id string) error {
+	if c, ok := mgr.containers[id]; ok {
+
+		c.LastInvocation = time.Time{}
+		c.IsRunning = false
+		c.DockerID = ""
+		c.DockerName = ""
+		c.BackendUrl = url.URL{}
+
+		return nil
+	} else {
+		return &mgrError{nil, "Container not found", mgrErrorNotFound}
+	}
+}
+
 func (mgr *ContainerManager) StopContainers(limit time.Duration) error {
 	cutoff := time.Now().Add(-limit)
 	errors := &mgrError{}

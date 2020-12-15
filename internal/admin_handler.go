@@ -78,6 +78,7 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 	c, err := G.ContainerMgr.create(id, tmp)
 	if err != nil {
+		_ = G.ContainerMgr.delete(id)
 		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return
@@ -86,13 +87,16 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 	// Create docker container
 	err = runContainer(c)
 	if err != nil {
+
+		_ = removeContainer(c)
+		_ = G.ContainerMgr.reset(id)
+
 		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return
 	}
 
 	if G.UseNginx {
-		// Write new nginx configuration
 		err = writeNginxConf(c.NginxConf, c.Port, c.FrontendUrl.String())
 		if err != nil {
 			G.Logger.LogError(err)
@@ -124,6 +128,8 @@ func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	defer G.ContainerMgr.delete(id)
+
 	if c.IsRunning {
 		if err = stopContainer(c); err != nil {
 			G.Logger.LogError(err)
@@ -133,13 +139,6 @@ func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = removeContainer(c); err != nil {
-		G.Logger.LogError(err)
-		HTTPError(w, err.Error(), 500)
-		return
-	}
-
-	err = G.ContainerMgr.delete(id)
-	if err != nil {
 		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return

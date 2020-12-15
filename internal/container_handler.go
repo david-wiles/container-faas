@@ -14,11 +14,13 @@ func (i ContainerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if len(parts) < 3 {
 		G.Logger.Warning("Invalid request: " + r.URL.Path)
-		HTTPError(w, "Container not found", 4040)
+		HTTPError(w, "Container not found", 404)
 		return
 	}
 
-	c, err := G.ContainerMgr.get(parts[2])
+	id := parts[2]
+
+	c, err := G.ContainerMgr.get(id)
 	if err != nil {
 		if ContainerNotFound(err) {
 			G.Logger.Warning(err.Error())
@@ -34,6 +36,7 @@ func (i ContainerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if c.DockerID == "" {
 		err = createContainer(c)
 		if err != nil {
+			_ = G.ContainerMgr.reset(id)
 			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
 			return
@@ -44,6 +47,10 @@ func (i ContainerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !c.IsRunning {
 		err = startContainer(c)
 		if err != nil {
+
+			_ = removeContainer(c)
+			c.IsRunning = false
+
 			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
 			return
@@ -83,7 +90,7 @@ func (err *containerStartError) Error() string {
 	}
 }
 
-// Once the container is running, it will make a request to the server's /status/<container> endpoint to indicate its
+// Once the container is running, it will make a request to the server's /healthz/<container> endpoint to indicate its
 // status. If this doesn't happen within a certain period of time, we should return an error
 func waitForRun(c *containerInstance) error {
 

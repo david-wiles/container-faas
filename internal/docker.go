@@ -6,7 +6,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
-	"os"
 )
 
 type dockerErrorType int
@@ -100,25 +99,6 @@ func removeContainer(c *containerInstance) error {
 
 	if err := G.Docker.ContainerRemove(ctx, c.DockerID, types.ContainerRemoveOptions{}); err != nil {
 		return &dockerError{err, "Could not remove container", dockerErrorRemove}
-	}
-
-	return nil
-}
-
-func buildImage(file string) error {
-	ctx := context.Background()
-	f, err := os.Open(file)
-	if err != nil {
-		return err
-	}
-
-	_, err = G.Docker.ImageBuild(ctx, f, types.ImageBuildOptions{})
-	if err != nil {
-		return &dockerError{
-			err,
-			"Could not build image",
-			dockerErrorImageBuild,
-		}
 	}
 
 	return nil

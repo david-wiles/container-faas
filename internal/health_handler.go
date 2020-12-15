@@ -14,18 +14,18 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	names, err := getContainerName(strings.TrimLeft(r.URL.Path, "/healthz/"))
+	names, err := getContainerName(strings.TrimLeft(r.URL.Path, "/health/"))
 	if err != nil {
 		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return
 	}
 
-	var c *containerInstance
+	var c *containerInstance = nil
 
 	for _, name := range names {
 		c, err = G.ContainerMgr.get(name[1:])
-		if err == nil {
+		if c != nil {
 			break
 		}
 	}

@@ -24,7 +24,7 @@ func main() {
 	// Set up http handlers
 	mux.Handle("/admin/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.AdminHandler{}))
 	mux.Handle("/container/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.ContainerHandler{}))
-	mux.Handle("/healthz/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.HealthHandler{}))
+	mux.Handle("/health/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.HealthHandler{}))
 	mux.Handle("/", internal.G.Logger.LogRequestFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			internal.HTTPError(w, "Unsupported method", 400)
