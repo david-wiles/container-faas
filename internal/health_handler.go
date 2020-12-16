@@ -1,9 +1,7 @@
 package internal
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 )
 
 type HealthHandler struct{}
@@ -14,7 +12,14 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	names, err := getContainerName(strings.TrimLeft(r.URL.Path, "/health/"))
+	id, err := trimPath("/health/", r)
+	if err != nil {
+		HTTPError(w, "Resource not found", 404)
+		return
+	}
+
+	// remove /health/ from the path and get container name
+	names, err := getContainerName(id)
 	if err != nil {
 		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
@@ -24,7 +29,7 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var c *containerInstance = nil
 
 	for _, name := range names {
-		c, err = G.ContainerMgr.get(name[1:])
+		c, err = G.ContainerMgr.get(name[1:]) // For some reason, Docker starts names with a '/' ??
 		if c != nil {
 			break
 		}
@@ -44,5 +49,5 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	c.IsRunning = true
 
-	_, _ = fmt.Fprintln(w, "Success")
+	w.WriteHeader(200)
 }

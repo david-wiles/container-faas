@@ -16,8 +16,7 @@ func main() {
 	}
 
 	mux := &internal.RegexMux{
-
-		NotFound: &internal.NotFoundHandler{},
+		NotFound: internal.G.Logger.LogRequests(&internal.NotFoundHandler{}),
 	}
 	jobs := cron.New()
 
@@ -25,13 +24,6 @@ func main() {
 	mux.Handle("/admin/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.AdminHandler{}))
 	mux.Handle("/container/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.ContainerHandler{}))
 	mux.Handle("/health/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.HealthHandler{}))
-	mux.Handle("/", internal.G.Logger.LogRequestFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			internal.HTTPError(w, "Unsupported method", 400)
-			return
-		}
-		_, _ = fmt.Fprintf(w, "Got your request, but there isn't much to do yet.")
-	}))
 
 	// Setup cron jobs
 	_, err = jobs.AddFunc("@every 1h", func() {

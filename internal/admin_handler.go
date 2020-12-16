@@ -2,7 +2,6 @@ package internal
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -23,7 +22,11 @@ func (h AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (AdminHandler) get(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimLeft(r.URL.Path, "/admin/")
+	id, err := trimPath("/admin/", r)
+	if err != nil {
+		HTTPError(w, "Resource not found", 404)
+		return
+	}
 
 	c, err := G.ContainerMgr.get(id)
 	if err != nil {
@@ -50,19 +53,25 @@ func (AdminHandler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 type containerPostRequest struct {
-	Image       string   `json:"Image"`
-	Dir         string   `json:"Dir"`
-	Environment []string `json:"Environment"`
+	Image string   `json:"Image"`
+	Cmd   string   `json:"Cmd"`
+	Dir   string   `json:"Dir"`
+	Env   []string `json:"Env"`
 }
 
 func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 	// Parse request body
 	reqBody := &containerPostRequest{}
-	id := strings.TrimLeft(r.URL.Path, "/admin/")
+
+	id, err := trimPath("/admin/", r)
+	if err != nil {
+		HTTPError(w, "Resource not found", 404)
+		return
+	}
 
 	defer r.Body.Close()
 	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(reqBody)
+	err = decoder.Decode(reqBody)
 	if err != nil {
 		G.Logger.LogError(err)
 		HTTPError(w, "Could not parse request body: "+err.Error(), 500)
@@ -71,10 +80,11 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	// Create container entry
 	tmp := containerInstance{
-		Image:       reqBody.Image,
-		DockerName:  id,
-		Dir:         reqBody.Dir,
-		Environment: reqBody.Environment,
+		Image:      reqBody.Image,
+		Cmd:        strings.Split(reqBody.Cmd, " "),
+		DockerName: id,
+		Dir:        reqBody.Dir,
+		Env:        reqBody.Env,
 	}
 	c, err := G.ContainerMgr.create(id, tmp)
 	if err != nil {
@@ -107,13 +117,23 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 
 	G.Logger.Info("Successfully built container")
 
-	// DEBUG
-	_, _ = fmt.Fprintf(w, "Success!")
+	b, err := json.Marshal(c)
+	if err != nil {
+		G.Logger.LogError(err)
+		HTTPError(w, err.Error(), 500)
+		return
+	}
 
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(b)
 }
 
 func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimLeft(r.URL.Path, "/admin/")
+	id, err := trimPath("/admin/", r)
+	if err != nil {
+		HTTPError(w, "Resource not found", 404)
+		return
+	}
 
 	c, err := G.ContainerMgr.get(id)
 	if err != nil {
@@ -144,6 +164,5 @@ func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// DEBUG
-	_, _ = fmt.Fprintf(w, "Successfully deleted container")
+	w.WriteHeader(200)
 }

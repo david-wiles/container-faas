@@ -43,7 +43,7 @@ func (mgr *ContainerManager) get(id string) (*containerInstance, error) {
 	if c, ok := mgr.containers[id]; ok {
 		return c, nil
 	} else {
-		return nil, &mgrError{nil, "Container not found", mgrErrorExists}
+		return nil, &mgrError{nil, "Container not found", mgrErrorNotFound}
 	}
 }
 
@@ -62,9 +62,10 @@ func (mgr *ContainerManager) create(id string, n containerInstance) (*containerI
 		c := &containerInstance{
 			Id:          id,
 			Image:       n.Image,
+			Cmd:         n.Cmd,
 			DockerName:  n.DockerName,
 			Dir:         n.Dir,
-			Environment: n.Environment,
+			Env:         n.Env,
 			FrontendUrl: *frontendUrl,
 			BackendUrl:  *backendUrl,
 		}
@@ -95,9 +96,9 @@ func (mgr *ContainerManager) updateOrCreate(id string, n containerInstance) *con
 		_, _ = mgr.update(id, n)
 	} else {
 		mgr.containers[id] = &containerInstance{
-			Id:          id,
-			Dir:         n.Dir,
-			Environment: n.Environment,
+			Id:  id,
+			Dir: n.Dir,
+			Env: n.Env,
 		}
 	}
 

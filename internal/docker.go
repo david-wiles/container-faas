@@ -53,8 +53,10 @@ func createContainer(c *containerInstance) error {
 	ctx := context.Background()
 	dockerResp, err := G.Docker.ContainerCreate(ctx,
 		&container.Config{
-			Env:   c.Environment,
-			Image: c.Image,
+			Env:        c.Env,
+			Image:      c.Image,
+			Cmd:        c.Cmd,
+			Entrypoint: []string{"docker-entrypoint.sh"},
 		}, &container.HostConfig{
 			Binds: []string{
 				c.Dir + ":/home/app",

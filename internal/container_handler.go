@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strings"
@@ -25,11 +26,12 @@ func (i ContainerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if ContainerNotFound(err) {
 			G.Logger.Warning(err.Error())
 			HTTPError(w, err.Error(), 404)
+			return
 		} else {
 			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
+			return
 		}
-		return
 	}
 
 	// Create the container if it was evicted
@@ -67,15 +69,16 @@ func (i ContainerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.LastInvocation = time.Now()
 
 	// Rewrite path and pass to proxy
-	urlRewrite, err := url.Parse(strings.TrimRight(r.URL.String(), "/container/"+c.Id))
+	urlRewrite, err := url.Parse(strings.ReplaceAll(r.URL.String(), "/container/"+c.Id, ""))
 	if err != nil {
 		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return
 	}
 
-	r.URL = urlRewrite
-	c.proxy.ServeHTTP(w, r)
+	proxyRequest := r.Clone(context.Background())
+	proxyRequest.URL = urlRewrite
+	c.proxy.ServeHTTP(w, proxyRequest)
 }
 
 type containerStartError struct {

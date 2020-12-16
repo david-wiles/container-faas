@@ -10,6 +10,18 @@ type errorResponse struct {
 	Message string `json:"message"`
 }
 
+type requestError struct {
+	msg string
+}
+
+func (err *requestError) Error() string {
+	if err != nil {
+		return err.msg
+	} else {
+		return ""
+	}
+}
+
 // http.Error with json response type instead of text/plain
 func HTTPError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -33,4 +45,14 @@ type NotFoundHandler struct{}
 // Default 404 handler
 func (h *NotFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	HTTPError(w, "Resource not found", 404)
+}
+
+func trimPath(base string, r *http.Request) (string, error) {
+	baseLen := len(base)
+
+	if len(r.URL.Path) < baseLen {
+		return "", &requestError{"Invalid request"}
+	}
+
+	return r.URL.Path[baseLen:], nil
 }

@@ -11,11 +11,12 @@ type containerInstance struct {
 	LastInvocation time.Time `json:"LastInvocation"` // Time of the last container invocation
 	IsRunning      bool      `json:"IsRunning"`      // Indicates whether a docker container is currently running
 
-	Image       string   `json:"Image"`       // Name of the image to use when creating this container
-	DockerID    string   `json:"DockerId"`    // Docker ID, obtained once a container has been created
-	DockerName  string   `json:"DockerName"`  // Unique name of the container. Should match the Id in most cases
-	Dir         string   `json:"Dir"`         // Directory of the app files on the server
-	Environment []string `json:"Environment"` // Any environment variables
+	Image      string   `json:"Image"`      // Name of the image to use when creating this container
+	Cmd        []string `json:"Cmd"`        // Command to execute when starting the container
+	DockerID   string   `json:"DockerId"`   // Docker ID, obtained once a container has been created
+	DockerName string   `json:"DockerName"` // Unique name of the container. Should match the Id in most cases
+	Dir        string   `json:"Dir"`        // Directory of the app files on the server
+	Env        []string `json:"Env"`        // Any environment variables
 
 	FrontendUrl url.URL `json:"FrontendUrl"` // User-facing or proxy-facing url
 	BackendUrl  url.URL `json:"BackendUrl"`  // The URL of the container, used within the docker network
