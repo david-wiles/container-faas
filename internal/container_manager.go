@@ -1,13 +1,16 @@
 package internal
 
 import (
+	"math/rand"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"time"
 )
 
 type ContainerManager struct {
 	containers map[string]*containerInstance
+	ports      [64511]bool
 }
 
 type mgrErrorType int
@@ -68,7 +71,10 @@ func (mgr *ContainerManager) create(id string, n containerInstance) (*containerI
 			Env:         n.Env,
 			FrontendUrl: *frontendUrl,
 			BackendUrl:  *backendUrl,
+			Port:        mgr.reservePort(),
+			NginxConf:   G.NginxAppDir + n.DockerName + ".conf",
 		}
+
 		c.proxy = httputil.NewSingleHostReverseProxy(&c.BackendUrl)
 
 		mgr.containers[id] = c
@@ -111,7 +117,9 @@ func (mgr *ContainerManager) exists(id string) bool {
 }
 
 func (mgr *ContainerManager) delete(id string) error {
-	if _, ok := mgr.containers[id]; ok {
+	if c, ok := mgr.containers[id]; ok {
+		_ = os.Remove(c.NginxConf)
+		mgr.ports[c.Port] = false
 		delete(mgr.containers, id)
 	} else {
 		return &mgrError{nil, "Container not found", mgrErrorNotFound}
@@ -169,4 +177,16 @@ func (mgr *ContainerManager) EvictContainers(limit time.Duration) error {
 	}
 
 	return nil
+}
+
+// TODO mutex
+func (mgr *ContainerManager) reservePort() int {
+	port := rand.Intn(6000-5000) + 5000
+
+	for mgr.ports[port] {
+		port = (((port - 5000) + 1) % 1000) + 5000
+	}
+
+	mgr.ports[port] = true
+	return port
 }

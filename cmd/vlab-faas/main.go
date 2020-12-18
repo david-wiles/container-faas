@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/robfig/cron/v3"
 	"net/http"
@@ -9,8 +10,25 @@ import (
 )
 
 func main() {
+
+	addrPtr := flag.String("addr", "", "Address used to listen for connections")
+	stopTimeoutPtr := flag.String("stop-timeout", "", "Amount of time to wait for a container to stop")
+	containerStartTimeoutPtr := flag.String("start-timeout", "", "Amount of time to wait for a container to start")
+	dockerNetworkPtr := flag.String("network", "", "Name of the docker network the app containers are placed in")
+	useNginx := flag.Bool("nginx", false, "Indicates whether the program will run behind an nginx proxy")
+	logLevel := flag.Int("log", 0, "Log level. 0 indicates all logs, 4 indicates none")
+
+	flag.Parse()
+
 	var err error
-	internal.G, err = internal.ParseArgs()
+	internal.G, err = internal.ParseArgs(
+		*addrPtr,
+		*stopTimeoutPtr,
+		*containerStartTimeoutPtr,
+		*dockerNetworkPtr,
+		*useNginx,
+		*logLevel,
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -41,7 +59,7 @@ func main() {
 		if err != nil {
 			internal.G.Logger.LogError(err)
 		} else {
-			internal.G.Logger.Info("Successfully evicted old containers.")
+			internal.G.Logger.Info("Successfully stopped inactive containers.")
 		}
 	})
 	if err != nil {

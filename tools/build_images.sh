@@ -2,12 +2,13 @@
 
 walk_dir() {
 	for pathname in "$1"/*; do
+	    FILE=$(basename "$pathname")
 		if [ -d "$pathname" ]; then
 		    walk_dir "$pathname"
-        elif [ -e "$pathname" ]; then
+        elif [ "$FILE" = "Dockerfile" ]; then
             CTX=$(dirname "$pathname")
 #            printf "docker build %s -t %s\n" "$CTX" $(basename $(dirname "$pathname"))
-            docker build "$CTX" -t $(basename "$CTX")
+            docker build -t $(basename "$CTX") "$CTX"
         fi
     done
 }

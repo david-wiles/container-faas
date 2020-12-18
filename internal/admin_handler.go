@@ -113,6 +113,13 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 			HTTPError(w, "Could not write Nginx configuration file: "+err.Error(), 500)
 			return
 		}
+
+		err = nginxReload()
+		if err != nil {
+			G.Logger.LogError(err)
+			HTTPError(w, "Could not reload nginx: "+err.Error(), 500)
+			return
+		}
 	}
 
 	G.Logger.Info("Successfully built container")

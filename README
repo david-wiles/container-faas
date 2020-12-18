@@ -11,8 +11,10 @@ constraints which the server must follow...
   into a container (future), all they will need to do is tell the server what command should be used to start their program.
 
 To start the server without the nginx reverse proxy:
-docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 5000:5000 --network app-network --name vlab vlab-server
+docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 5000:5000 --network app-network --rm vlab-server
 
+With nginx:
+docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:80 -p 5000-6000:5000-6000/tcp --network app-network --rm vlab-server-nginx
 
 /
     GET - get server information
