@@ -66,6 +66,11 @@ func createContainer(c *containerInstance) error {
 		return &dockerError{err, "Could not create docker container", dockerErrorContainerCreate}
 	}
 
+	if err := G.Docker.NetworkConnect(ctx, G.DockerNetwork, dockerResp.ID, &network.EndpointSettings{}); err != nil {
+		_ = G.Docker.ContainerStop(ctx, dockerResp.ID, nil)
+		return &dockerError{err, "Could not connect container to network", dockerErrorStart}
+	}
+
 	c.DockerID = dockerResp.ID
 
 	return nil
@@ -76,11 +81,6 @@ func startContainer(c *containerInstance) error {
 
 	if err := G.Docker.ContainerStart(ctx, c.DockerID, types.ContainerStartOptions{}); err != nil {
 		return &dockerError{err, "Could not start docker container", dockerErrorStart}
-	}
-
-	if err := G.Docker.NetworkConnect(ctx, G.DockerNetwork, c.DockerID, &network.EndpointSettings{}); err != nil {
-		_ = G.Docker.ContainerStop(ctx, c.DockerID, nil)
-		return &dockerError{err, "Could not connect container to network", dockerErrorStart}
 	}
 
 	return nil

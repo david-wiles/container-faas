@@ -118,7 +118,14 @@ func (mgr *ContainerManager) exists(id string) bool {
 
 func (mgr *ContainerManager) delete(id string) error {
 	if c, ok := mgr.containers[id]; ok {
-		_ = os.Remove(c.NginxConf)
+		err := os.Remove(c.NginxConf)
+		if err != nil {
+			return err
+		}
+		err = nginxReload()
+		if err != nil {
+			return err
+		}
 		mgr.ports[c.Port] = false
 		delete(mgr.containers, id)
 	} else {
@@ -154,8 +161,9 @@ func (mgr *ContainerManager) StopContainers(limit time.Duration) error {
 			err := stopContainer(c)
 			if err != nil {
 				errors.errs = append(errors.errs, err)
+			} else {
+				c.IsRunning = false
 			}
-			c.IsRunning = false
 		}
 	}
 
@@ -171,8 +179,9 @@ func (mgr *ContainerManager) EvictContainers(limit time.Duration) error {
 			err := removeContainer(c)
 			if err != nil {
 				errors.errs = append(errors.errs, err)
+			} else {
+				c.DockerID = ""
 			}
-			c.DockerID = ""
 		}
 	}
 

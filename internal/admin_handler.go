@@ -69,6 +69,11 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if G.ContainerMgr.exists(id) {
+		HTTPError(w, "Container already exists", 200)
+		return
+	}
+
 	defer r.Body.Close()
 	decoder := json.NewDecoder(r.Body)
 	err = decoder.Decode(reqBody)

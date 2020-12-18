@@ -54,8 +54,8 @@ func main() {
 		}
 	})
 	// Stop containers that have been inactive for over 15 minutes
-	_, err = jobs.AddFunc("@every 5m", func() {
-		err := internal.G.ContainerMgr.StopContainers(time.Minute * 15)
+	_, err = jobs.AddFunc("@every 1m", func() {
+		err := internal.G.ContainerMgr.StopContainers(time.Minute)
 		if err != nil {
 			internal.G.Logger.LogError(err)
 		} else {
