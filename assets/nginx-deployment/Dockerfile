@@ -1,7 +1,7 @@
-FROM vlab-server AS builder
+FROM paas-server AS builder
 FROM nginx:alpine
 
-COPY --from=builder /go/bin/faas-server /go/bin/faas-server
+COPY --from=builder /go/bin/paas-server /go/bin/paas-server
 COPY ./nginx.conf /etc/nginx/nginx.conf
 
 RUN mkdir /etc/nginx/apps/

@@ -1,4 +1,4 @@
-module vlab-faas-server
+module container-paas
 
 go 1.15
 

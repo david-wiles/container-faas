@@ -4,10 +4,10 @@ This is a simple platform that allows users to run containers started with a sim
 be pre-built on the server, but the user may enter any starting command.
 
 To start the server without the nginx reverse proxy:
-docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:8080 --network app-network --rm vlab-server
+docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:8080 --network app-network --rm paas-server
 
 With nginx:
-docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:80 -p 5000-6000:5000-6000/tcp --network app-network --rm vlab-server-nginx
+docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:80 -p 5000-6000:5000-6000/tcp --network app-network --rm paas-server-nginx
 
 /admin/<container id>
     GET - get data about this container

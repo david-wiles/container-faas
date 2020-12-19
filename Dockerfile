@@ -2,7 +2,7 @@ FROM golang:alpine AS builder
 
 RUN apk update && apk add --no-cache git
 
-WORKDIR $GOPATH/src/vlab/faas-server
+WORKDIR $GOPATH/src/paas-server
 COPY ./go.mod ./go.mod
 COPY ./go.sum ./go.sum
 
@@ -11,12 +11,12 @@ RUN go mod verify
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/faas-server ./cmd/vlab-faas/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/paas-server ./cmd/paas/main.go
 
-RUN chmod +x /go/bin/faas-server
+RUN chmod +x /go/bin/paas-server
 
 FROM scratch
 
-COPY --from=builder /go/bin/faas-server /go/bin/faas-server
+COPY --from=builder /go/bin/paas-server /go/bin/paas-server
 
-ENTRYPOINT ["/go/bin/faas-server"]
+ENTRYPOINT ["/go/bin/paas-server"]
