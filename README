@@ -1,27 +1,25 @@
-vlab-faas-server manages the state of various docker containers currently running student's programs. There are a few
-constraints which the server must follow...
+container-paas
 
-* The student's files are stored on a separate volume, which must be mounted to each container to run.
-* Each container should listen on a unique port. An nginx reverse proxy will route requests to each container.
-* The containers should not have to restart for a student to see their changes
-* A container may see lots of activity for a short period of time (a class period), but then may not be used for a long time.
-  We may want to evict containers after a certain period of time, and pull from a private registry whenever the container
-  is needed again.
-* The student should not need to interact with any system configuration. While we may want to allow the student to ssh
-  into a container (future), all they will need to do is tell the server what command should be used to start their program.
+This is a simple platform that allows users to run containers started with a simple HTTP request. The containers must
+be pre-built on the server, but the user may enter any starting command.
 
 To start the server without the nginx reverse proxy:
-docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 5000:5000 --network app-network --rm vlab-server
+docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:8080 --network app-network --rm vlab-server
 
 With nginx:
 docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:80 -p 5000-6000:5000-6000/tcp --network app-network --rm vlab-server-nginx
 
-/
-    GET - get server information
-
 /admin/<container id>
     GET - get data about this container
     POST - create a new container or update an existing one
+        request body: application/json
+        {
+            "Image": string, - the name of the image to use
+            "Cmd": string, - start command
+            "Dir": string, - directory to mount. Must exist on the server
+            "Env": [string] - list of environment variables to pass to the container, in the form KEY=VAL
+        }
+
     DELETE - deletes the container
 
 /container/<container id>

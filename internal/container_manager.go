@@ -190,6 +190,7 @@ func (mgr *ContainerManager) EvictContainers(limit time.Duration) error {
 
 // TODO mutex
 func (mgr *ContainerManager) reservePort() int {
+	// Limiting to 1000 ports for testing
 	port := rand.Intn(6000-5000) + 5000
 
 	for mgr.ports[port] {

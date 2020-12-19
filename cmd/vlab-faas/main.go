@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"github.com/robfig/cron/v3"
 	"net/http"
 	"time"
@@ -69,8 +68,7 @@ func main() {
 	jobs.Start()
 
 	// Start accepting connections
-	_, _ = fmt.Println("Listening for requests on " + internal.G.Addr)
-
+	internal.G.Logger.Info("Listening for requests on " + internal.G.Addr)
 	err = http.ListenAndServe(internal.G.Addr, mux)
 	if err != nil {
 		panic(err)

@@ -1,9 +1,9 @@
 package internal
 
 import (
-	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -67,19 +67,19 @@ func (log Logger) LogRequestFunc(next func(http.ResponseWriter, *http.Request)) 
 
 func (log Logger) Error(message string) {
 	if log.level < 3 {
-		_, _ = fmt.Fprintf(log.errorLog, "[%s] ERROR: %s\n", timeNow(), message)
+		_, _ = log.errorLog.Write([]byte("[" + timeNow() + "] ERROR: " + message + "\n"))
 	}
 }
 
 func (log Logger) Warning(message string) {
 	if log.level < 2 {
-		_, _ = fmt.Fprintf(log.infoLog, "[%s] WARN: %s\n", timeNow(), message)
+		_, _ = log.infoLog.Write([]byte("[" + timeNow() + "] WARN: " + message + "\n"))
 	}
 }
 
 func (log Logger) Info(message string) {
 	if log.level < 1 {
-		_, _ = fmt.Fprintf(log.infoLog, "[%s] INFO: %s\n", timeNow(), message)
+		_, _ = log.infoLog.Write([]byte("[" + timeNow() + "] INFO: " + message + "\n"))
 	}
 }
 
@@ -87,9 +87,9 @@ func (log Logger) LogAccess(w *loggedResponseWriter, r *http.Request) {
 	if log.level < 1 {
 		remoteAddr := r.Header.Get("X-Forwarded-For")
 		userAgent := r.Header.Get("User-Agent")
-		timing := time.Now().Sub(w.reqStart).Milliseconds()
+		timing := int(time.Now().Sub(w.reqStart).Milliseconds())
 		// $remote_addr [$time_local] "$request" $path $status $http_user_agent $request_time
-		_, _ = fmt.Fprintf(log.infoLog, "[%s] %s %q %q %d %s %dms\n", timeNow(), remoteAddr, r.Method, r.URL.Path, w.status, userAgent, timing)
+		_, _ = log.infoLog.Write([]byte("[" + timeNow() + "] " + remoteAddr + " " + r.Method + " " + r.URL.Path + " " + strconv.Itoa(w.status) + " " + userAgent + " " + strconv.Itoa(timing) + "ms\n"))
 	}
 }
 
