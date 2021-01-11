@@ -28,35 +28,27 @@ func (AdminHandler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, err := G.ContainerMgr.get(id)
-	if err != nil {
-		if ContainerNotFound(err) {
-			G.Logger.Warning(err.Error())
-			HTTPError(w, err.Error(), 404)
-			return
-		} else {
+	if app, ok := G.AppMgr.Get(id); ok {
+		b, err := json.Marshal(app)
+		if err != nil {
 			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
 			return
 		}
-	}
 
-	b, err := json.Marshal(c)
-	if err != nil {
-		G.Logger.LogError(err)
-		HTTPError(w, err.Error(), 500)
-		return
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write(b)
+	} else {
+		G.Logger.Warning("App not found: " + id)
+		HTTPError(w, "App not found", 404)
 	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, _ = w.Write(b)
 }
 
 type containerPostRequest struct {
-	Image string   `json:"Image"`
-	Cmd   string   `json:"Cmd"`
-	Dir   string   `json:"Dir"`
-	Env   []string `json:"Env"`
+	Image string   `json:"image"`
+	Cmd   string   `json:"cmd"`
+	Dir   string   `json:"dir"`
+	Env   []string `json:"env"`
 }
 
 func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +61,7 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if G.ContainerMgr.exists(id) {
+	if _, ok := G.AppMgr.Get(id); ok {
 		HTTPError(w, "Container already exists", 200)
 		return
 	}
@@ -83,61 +75,47 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create container entry
-	tmp := containerInstance{
-		Image:      reqBody.Image,
-		Cmd:        strings.Split(reqBody.Cmd, " "),
-		DockerName: id,
-		Dir:        reqBody.Dir,
-		Env:        reqBody.Env,
-	}
-	c, err := G.ContainerMgr.create(id, tmp)
-	if err != nil {
-		_ = G.ContainerMgr.delete(id)
-		G.Logger.LogError(err)
-		HTTPError(w, err.Error(), 500)
-		return
-	}
+	if app, ok := G.AppMgr.Create(App{Id: id}); ok {
+		app.Runner = NewDockerContainer(
+			reqBody.Image,
+			"",
+			id,
+			reqBody.Dir,
+			strings.Split(reqBody.Cmd, " "),
+			reqBody.Env,
+		)
 
-	// Create docker container
-	err = runContainer(c)
-	if err != nil {
-
-		_ = removeContainer(c)
-		_ = G.ContainerMgr.reset(id)
-
-		G.Logger.LogError(err)
-		HTTPError(w, err.Error(), 500)
-		return
-	}
-
-	if G.UseNginx {
-		err = writeNginxConf(c.NginxConf, c.Port, c.FrontendUrl.String())
-		if err != nil {
+		if err := app.Init(); err != nil {
+			_ = app.Runner.Cleanup()
 			G.Logger.LogError(err)
-			HTTPError(w, "Could not write Nginx configuration file: "+err.Error(), 500)
+			HTTPError(w, err.Error(), 500)
 			return
 		}
 
-		err = nginxReload()
-		if err != nil {
+		if err := initAppIngress(app); err != nil {
+			_ = G.Ingress.Remove(app)
 			G.Logger.LogError(err)
-			HTTPError(w, "Could not reload nginx: "+err.Error(), 500)
+			HTTPError(w, err.Error(), 500)
 			return
 		}
-	}
 
-	G.Logger.Info("Successfully built container")
+		G.Logger.Info("Successfully built container")
 
-	b, err := json.Marshal(c)
-	if err != nil {
+		b, err := json.Marshal(app)
+		if err != nil {
+			G.Logger.LogError(err)
+			HTTPError(w, err.Error(), 500)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write(b)
+	} else {
+		G.AppMgr.Delete(id)
 		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, _ = w.Write(b)
 }
 
 func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
@@ -147,34 +125,50 @@ func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, err := G.ContainerMgr.get(id)
-	if err != nil {
-		if ContainerNotFound(err) {
-			G.Logger.Warning(err.Error())
-			HTTPError(w, err.Error(), 404)
-			return
-		} else {
+	if app, ok := G.AppMgr.Get(id); ok {
+		if err = app.Runner.Cleanup(); err != nil {
 			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
 			return
 		}
-	}
 
-	defer G.ContainerMgr.delete(id)
-
-	if c.IsRunning {
-		if err = stopContainer(c); err != nil {
+		if err = removeAppIngress(app); err != nil {
 			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
 			return
 		}
-	}
 
-	if err = removeContainer(c); err != nil {
-		G.Logger.LogError(err)
-		HTTPError(w, err.Error(), 500)
+		G.AppMgr.Delete(id)
+
+		w.WriteHeader(200)
+
+	} else {
+		G.Logger.Warning("Container not found")
+		HTTPError(w, "Resource not found", 404)
 		return
 	}
+}
 
-	w.WriteHeader(200)
+func initAppIngress(app *App) error {
+	if err := G.Ingress.Write(app); err != nil {
+		return err
+	}
+
+	if err := G.Ingress.Reload(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func removeAppIngress(app *App) error {
+	if err := G.Ingress.Remove(app); err != nil {
+		return err
+	}
+
+	if err := G.Ingress.Reload(); err != nil {
+		return err
+	}
+
+	return nil
 }

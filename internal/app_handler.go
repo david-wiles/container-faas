@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-type ContainerHandler struct{}
+type AppHandler struct{}
 
-func (i ContainerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path, "/")
 
 	if len(parts) < 3 {
@@ -21,64 +21,41 @@ func (i ContainerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	id := parts[2]
 
-	c, err := G.ContainerMgr.get(id)
-	if err != nil {
-		if ContainerNotFound(err) {
-			G.Logger.Warning(err.Error())
-			HTTPError(w, err.Error(), 404)
-			return
-		} else {
-			G.Logger.LogError(err)
-			HTTPError(w, err.Error(), 500)
-			return
-		}
+	app, ok := G.AppMgr.Get(id)
+	if !ok {
+		G.Logger.Warning("App not found")
+		HTTPError(w, "App not found", 404)
+		return
 	}
 
 	// Create the container if it was evicted
-	if c.DockerID == "" {
-		err = createContainer(c)
-		if err != nil {
-			_ = G.ContainerMgr.reset(id)
+	if !app.Runner.IsReady() {
+		if err := app.Runner.Create(); err != nil {
+			_ = app.Runner.Cleanup()
 			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
 			return
 		}
 	}
 
-	// Start the container if it isn't already running
-	if !c.IsRunning {
-		err = startContainer(c)
-		if err != nil {
-
-			_ = removeContainer(c)
-			c.IsRunning = false
-
-			G.Logger.LogError(err)
-			HTTPError(w, err.Error(), 500)
-			return
-		}
-
-		err = waitForRun(c)
-		if err != nil {
-			G.Logger.LogError(err)
-			HTTPError(w, err.Error(), 500)
-			return
-		}
-	}
-
-	c.LastInvocation = time.Now()
-
-	// Rewrite path and pass to proxy
-	urlRewrite, err := url.Parse(strings.ReplaceAll(r.URL.String(), "/container/"+c.Id, ""))
-	if err != nil {
+	if err := waitForReady(app); err != nil {
 		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return
 	}
 
+	// Rewrite path and pass to proxy
+	urlRewrite, err := url.Parse(strings.ReplaceAll(r.URL.String(), "/app/"+app.Id, ""))
+	if err != nil {
+		G.Logger.LogError(err)
+		HTTPError(w, err.Error(), 500)
+		return
+	}
 	proxyRequest := r.Clone(context.Background())
 	proxyRequest.URL = urlRewrite
-	c.proxy.ServeHTTP(w, proxyRequest)
+
+	app.LastInvocation = time.Now()
+	app.Runner.Invoke(w, proxyRequest)
 }
 
 type containerStartError struct {
@@ -95,14 +72,14 @@ func (err *containerStartError) Error() string {
 
 // Once the container is running, it will make a request to the server's /healthz/<container> endpoint to indicate its
 // status. If this doesn't happen within a certain period of time, we should return an error
-func waitForRun(c *containerInstance) error {
+func waitForReady(app *App) error {
 
 	start := time.Now()
 
-	for !c.IsRunning {
+	for !app.Runner.IsReady() {
 		time.Sleep(time.Second)
 
-		if time.Now().After(start.Add(G.ContainerStartTimeout)) {
+		if time.Now().After(start.Add(G.StartTimeout)) {
 			return &containerStartError{"Could not start the container"}
 		}
 	}

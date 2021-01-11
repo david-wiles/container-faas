@@ -2,24 +2,13 @@ package internal
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 )
 
 type errorResponse struct {
 	Error   bool   `json:"error"`
 	Message string `json:"message"`
-}
-
-type requestError struct {
-	msg string
-}
-
-func (err *requestError) Error() string {
-	if err != nil {
-		return err.msg
-	} else {
-		return ""
-	}
 }
 
 // http.Error with json response type instead of text/plain
@@ -51,7 +40,7 @@ func trimPath(base string, r *http.Request) (string, error) {
 	baseLen := len(base)
 
 	if len(r.URL.Path) < baseLen {
-		return "", &requestError{"Invalid request"}
+		return "", errors.New("Invalid request")
 	}
 
 	return r.URL.Path[baseLen:], nil

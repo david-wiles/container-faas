@@ -18,36 +18,14 @@ func (h *HealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// remove /health/ from the path and get container name
-	names, err := getContainerName(id)
-	if err != nil {
+	app, ok := G.AppMgr.Get(id)
+	if !ok {
 		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
 		return
 	}
 
-	var c *containerInstance = nil
-
-	for _, name := range names {
-		c, err = G.ContainerMgr.get(name[1:]) // For some reason, Docker starts names with a '/' ??
-		if c != nil {
-			break
-		}
-	}
-
-	if err != nil {
-		if ContainerNotFound(err) {
-			G.Logger.Warning(err.Error())
-			HTTPError(w, err.Error(), 404)
-			return
-		} else {
-			G.Logger.LogError(err)
-			HTTPError(w, err.Error(), 500)
-			return
-		}
-	}
-
-	c.IsRunning = true
+	app.Runner.SetIsReady()
 
 	w.WriteHeader(200)
 }

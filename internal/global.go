@@ -1,27 +1,48 @@
 package internal
 
 import (
+	"flag"
 	"github.com/docker/docker/client"
+	"github.com/robfig/cron/v3"
 	"os"
 	"time"
 )
 
 type Global struct {
-	ContainerMgr *ContainerManager
-	Logger       *Logger
-	Docker       *client.Client
+	AppMgr *DefaultAppManager
+	Logger *Logger
 
-	Addr                  string
-	DockerStopTimeout     time.Duration
-	ContainerStartTimeout time.Duration
-	DockerNetwork         string
+	Jobs *cron.Cron
 
-	NginxAppDir string
-	UseNginx    bool
+	Docker *client.Client
+
+	Addr          string
+	StopTimeout   time.Duration
+	StartTimeout  time.Duration
+	DockerNetwork string
+
+	Ingress IngressServer
 }
 
 // Parse all arguments. Passed arguments take precedence over environment variables
-func ParseArgs(addr, stopTimeout, startTimeout, network string, useNginx bool, logLevel int) (*Global, error) {
+func FromEnv() (*Global, error) {
+	addrPtr := flag.String("addr", "", "Address used to listen for connections")
+	stopTimeoutPtr := flag.String("stop-timeout", "", "Amount of time to wait for a container to stop")
+	containerStartTimeout := flag.String("start-timeout", "", "Amount of time to wait for a container to start")
+	dockerNetwork := flag.String("network", "", "Name of the docker network the app containers are placed in")
+	useNginx := flag.Bool("nginx", false, "Indicates whether the program will run behind an nginx proxy")
+	logLevel := flag.Int("log", 0, "Log level. 0 indicates all logs, 4 indicates none")
+
+	flag.Parse()
+
+	var (
+		addr         string = *addrPtr
+		stopTimeout  string = *stopTimeoutPtr
+		startTimeout string = *containerStartTimeout
+		network      string = *dockerNetwork
+		ingress      IngressServer
+	)
+
 	docker, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
@@ -48,27 +69,40 @@ func ParseArgs(addr, stopTimeout, startTimeout, network string, useNginx bool, l
 		return nil, err
 	}
 
-	containerStartTimeout, err := time.ParseDuration(startTimeout)
+	startTimeoutDuration, err := time.ParseDuration(startTimeout)
 	if err != nil {
 		return nil, err
 	}
 
+	if *useNginx {
+		ingress = &NginxPorts{
+			"/etc/nginx/apps",
+			[100]bool{},
+			make(map[string]struct {
+				port int
+				file string
+			}),
+		}
+	} else {
+		ingress = &NoIngress{}
+	}
+
 	return &Global{
-		ContainerMgr: &ContainerManager{
-			containers: make(map[string]*containerInstance),
+		AppMgr: &DefaultAppManager{
+			apps: make(map[string]*App),
 		},
 		Logger: &Logger{
 			infoLog:  os.Stdout,
 			errorLog: os.Stderr,
-			level:    LogLevel(logLevel),
+			level:    LogLevel(*logLevel),
 		},
-		Docker:                docker,
-		Addr:                  addr,
-		DockerStopTimeout:     dockerStopTimeout,
-		ContainerStartTimeout: containerStartTimeout,
-		DockerNetwork:         network,
-		NginxAppDir:           "/etc/nginx/apps/",
-		UseNginx:              useNginx,
+		Jobs:          cron.New(),
+		Docker:        docker,
+		Addr:          addr,
+		StopTimeout:   dockerStopTimeout,
+		StartTimeout:  startTimeoutDuration,
+		DockerNetwork: network,
+		Ingress:       ingress,
 	}, nil
 }
 

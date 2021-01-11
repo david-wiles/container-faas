@@ -2,46 +2,118 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
+	"github.com/robfig/cron/v3"
+	"net/http"
+	"net/http/httputil"
+	"time"
 )
 
-type dockerErrorType int
+type DockerContainerRunner struct {
+	Image      string   `json:"Image"`      // Name of the image to use when creating this container
+	Cmd        []string `json:"Cmd"`        // Command to execute when starting the container
+	DockerID   string   `json:"DockerId"`   // Docker ID, obtained once a container has been created
+	DockerName string   `json:"DockerName"` // Unique name of the container. Should match the Id in most cases
+	Dir        string   `json:"Dir"`        // Directory of the app files on the server
+	Env        []string `json:"Env"`        // Any environment variables
+	IsRunning  bool     `json:"isRunning"`  // Indicates whether this docker container is running
 
-const (
-	dockerErrorNoType          dockerErrorType = 0
-	dockerErrorContainerCreate dockerErrorType = 1
-	dockerErrorStart           dockerErrorType = 2
-	dockerErrorStop            dockerErrorType = 3
-	dockerErrorRemove          dockerErrorType = 4
-	dockerErrorNetworkCreate   dockerErrorType = 5
-	dockerErrorImageBuild      dockerErrorType = 6
-	dockerErrorContainerList   dockerErrorType = 7
-)
-
-type dockerError struct {
-	oErr error
-	msg  string
-	t    dockerErrorType
+	jobHandles []cron.EntryID
+	proxy      *httputil.ReverseProxy // Reverse proxy used to route requests to the app
 }
 
-func (err *dockerError) Error() string {
-	if err != nil {
-		return err.msg + " " + err.oErr.Error()
-	} else {
-		return ""
+func NewDockerContainer(image, dockerId, dockerName, dir string, cmd, env []string) *DockerContainerRunner {
+	return &DockerContainerRunner{
+		Image:      image,
+		Cmd:        cmd,
+		DockerID:   dockerId,
+		DockerName: dockerName,
+		Dir:        dir,
+		Env:        env,
 	}
 }
 
-func runContainer(c *containerInstance) error {
-	err := createContainer(c)
+func (d *DockerContainerRunner) Create() error {
+	return d.start()
+}
+
+func (d *DockerContainerRunner) Cleanup() error {
+	if d.IsRunning {
+		err := d.stop()
+		if err != nil {
+			return err
+		}
+	}
+
+	err := d.remove()
 	if err != nil {
 		return err
 	}
 
-	err = startContainer(c)
+	for _, job := range d.jobHandles {
+		G.Jobs.Remove(job)
+	}
+
+	return nil
+}
+
+// Set up jobs to automatically stop or remove container when there have been no recent invocations
+func (d *DockerContainerRunner) InitCleanupJobs(lastInvocation *time.Time) error {
+	stopJob, err := G.Jobs.AddFunc("@every 1m", func() {
+		cutoff := time.Now().Add(-time.Minute * 15)
+		if lastInvocation.Before(cutoff) {
+			err := d.stop()
+			if err != nil {
+				G.Logger.LogError(err)
+			}
+			d.IsRunning = false
+		}
+	})
+	if err != nil {
+		return err
+	}
+
+	removeJob, err := G.Jobs.AddFunc("@every 15m", func() {
+		cutoff := time.Now().Add(-time.Hour)
+		if lastInvocation.Before(cutoff) {
+			err := d.remove()
+			if err != nil {
+				G.Logger.LogError(err)
+				return
+			}
+			d.DockerID = ""
+		}
+	})
+	if err != nil {
+		return err
+	}
+
+	d.jobHandles = []cron.EntryID{stopJob, removeJob}
+	return nil
+}
+
+func (d *DockerContainerRunner) SetIsReady() {
+	d.IsRunning = true
+}
+
+func (d *DockerContainerRunner) IsReady() bool {
+	return d.IsRunning
+}
+
+func (d *DockerContainerRunner) Invoke(w http.ResponseWriter, r *http.Request) {
+	d.proxy.ServeHTTP(w, r)
+}
+
+func (d *DockerContainerRunner) run() error {
+	err := d.create()
+	if err != nil {
+		return err
+	}
+
+	err = d.start()
 	if err != nil {
 		return err
 	}
@@ -49,77 +121,59 @@ func runContainer(c *containerInstance) error {
 	return nil
 }
 
-func createContainer(c *containerInstance) error {
+func (d *DockerContainerRunner) create() error {
 	ctx := context.Background()
 	dockerResp, err := G.Docker.ContainerCreate(ctx,
 		&container.Config{
-			Env:        c.Env,
-			Image:      c.Image,
-			Cmd:        c.Cmd,
+			Env:        d.Env,
+			Image:      d.Image,
+			Cmd:        d.Cmd,
 			Entrypoint: []string{"docker-entrypoint.sh"},
 		}, &container.HostConfig{
 			Binds: []string{
-				c.Dir + ":/home/app",
+				d.Dir + ":/home/app",
 			},
-		}, nil, nil, c.DockerName)
+		}, nil, nil, d.DockerName)
 	if err != nil {
-		return &dockerError{err, "Could not create docker container", dockerErrorContainerCreate}
+		return errors.New("Could not create docker container")
 	}
 
 	if err := G.Docker.NetworkConnect(ctx, G.DockerNetwork, dockerResp.ID, &network.EndpointSettings{}); err != nil {
 		_ = G.Docker.ContainerStop(ctx, dockerResp.ID, nil)
-		return &dockerError{err, "Could not connect container to network", dockerErrorStart}
+		return errors.New("Could not connect container to network")
 	}
 
-	c.DockerID = dockerResp.ID
+	d.DockerID = dockerResp.ID
 
 	return nil
 }
 
-func startContainer(c *containerInstance) error {
+func (d *DockerContainerRunner) start() error {
 	ctx := context.Background()
 
-	if err := G.Docker.ContainerStart(ctx, c.DockerID, types.ContainerStartOptions{}); err != nil {
-		return &dockerError{err, "Could not start docker container", dockerErrorStart}
-	}
-
-	return nil
-}
-
-func stopContainer(c *containerInstance) error {
-	ctx := context.Background()
-
-	if err := G.Docker.ContainerStop(ctx, c.DockerID, &G.DockerStopTimeout); err != nil {
-		return &dockerError{err, "Could not stop docker container", dockerErrorStop}
+	if err := G.Docker.ContainerStart(ctx, d.DockerID, types.ContainerStartOptions{}); err != nil {
+		return errors.New("Could not start docker container")
 	}
 
 	return nil
 }
 
-func removeContainer(c *containerInstance) error {
+func (d *DockerContainerRunner) stop() error {
 	ctx := context.Background()
 
-	if err := G.Docker.ContainerRemove(ctx, c.DockerID, types.ContainerRemoveOptions{}); err != nil {
-		return &dockerError{err, "Could not remove container", dockerErrorRemove}
+	if err := G.Docker.ContainerStop(ctx, d.DockerID, &G.StopTimeout); err != nil {
+		return errors.New("Could not stop docker container")
 	}
 
 	return nil
 }
 
-func getContainerName(id string) ([]string, error) {
+func (d *DockerContainerRunner) remove() error {
 	ctx := context.Background()
 
-	containers, err := G.Docker.ContainerList(ctx, types.ContainerListOptions{
-		All:     true,
-		Filters: filters.NewArgs(filters.Arg("id", id)),
-	})
-	if err != nil {
-		return nil, err
+	if err := G.Docker.ContainerRemove(ctx, d.DockerID, types.ContainerRemoveOptions{}); err != nil {
+		return errors.New("Could not remove container")
 	}
 
-	if len(containers) > 1 {
-		return nil, &dockerError{nil, "Id passed is not unique", dockerErrorContainerList}
-	}
-
-	return containers[0].Names, nil
+	return nil
 }

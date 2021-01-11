@@ -1,6 +1,6 @@
 container-paas
 
-This is a simple platform that allows users to run containers started with a simple HTTP request. The containers must
+This is a simple platform that allows users to run apps started with a simple HTTP request. The apps must
 be pre-built on the server, but the user may enter any starting command.
 
 To start the server without the nginx reverse proxy:
@@ -9,24 +9,24 @@ docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:
 With nginx:
 docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:80 -p 5000-6000:5000-6000/tcp --network app-network --rm paas-server-nginx
 
-/admin/<container id>
-    GET - get data about this container
-    POST - create a new container or update an existing one
+/admin/<app id>
+    GET - get data about this app
+    POST - create a new app or update an existing one
         request body: application/json
         {
-            "Image": string, - the name of the image to use
-            "Cmd": string, - start command
-            "Dir": string, - directory to mount. Must exist on the server
-            "Env": [string] - list of environment variables to pass to the container, in the form KEY=VAL
+            "image": string, - the name of the image to use
+            "cmd": string, - start command
+            "dir": string, - directory to mount. Must exist on the server
+            "env": [string] - list of environment variables to pass to the app, in the form KEY=VAL
         }
 
-    DELETE - deletes the container
+    DELETE - deletes the app
 
-/container/<container id>
-    * - inform the server that this container has received a request and route the request to the container. Upon receiving
+/app/<app id>
+    * - inform the server that this app has received a request and route the request to the app. Upon receiving
         a response, we route it back to the user
 
-/health/<container id>
-    GET - informs the server that the specified container is running. Should not be used by any client other than
-           the container itself
+/health/<app id>
+    GET - informs the server that the specified app is running. Should not be used by any client other than
+           the app itself
 
