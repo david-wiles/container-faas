@@ -30,7 +30,11 @@ type loggedResponseWriter struct {
 }
 
 func logResponseWriter(w http.ResponseWriter) *loggedResponseWriter {
-	return &loggedResponseWriter{ResponseWriter: w}
+	return &loggedResponseWriter{
+		ResponseWriter: w,
+		status:         200,
+		reqStart:       time.Now(),
+	}
 }
 
 func (l *loggedResponseWriter) Header() http.Header {
@@ -53,7 +57,6 @@ func (log Logger) LogRequests(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 			} else {
 				loggedWriter := logResponseWriter(w)
-				loggedWriter.reqStart = time.Now()
 				next.ServeHTTP(loggedWriter, r)
 				log.LogAccess(loggedWriter, r)
 			}

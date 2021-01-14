@@ -6,21 +6,21 @@ import (
 )
 
 type App struct {
-	Id             string           `json:"id"`             // Unique ID for this app instance
-	LastInvocation time.Time        `json:"lastInvocation"` // Time of the last invocation
-	FrontendUrl    string           `json:"frontendUrl"`    // User-facing or reverse proxy-facing url
-	Runner         AppServiceRunner `json:"runner"`         // Interface to the service itself, since the app could be on a number of runtimes
+	ID             string    `json:"id"`             // Unique ID for this app instance
+	LastInvocation time.Time `json:"lastInvocation"` // Time of the last invocation
+	ExternalURL    string    `json:"externalUrl"`
+
+	// Reverse proxy-facing url, could be user-facing if no ingress
+	frontendURL string
+
+	// Interface to the service itself, since the app could be on a number of runtimes
+	Runner AppServiceRunner `json:"runner"`
 }
 
 func (app *App) Init() error {
 	if err := app.Runner.Create(); err != nil {
 		return err
 	}
-
-	if err := app.Runner.InitCleanupJobs(&app.LastInvocation); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -29,8 +29,7 @@ func (app *App) Init() error {
 type AppServiceRunner interface {
 	Create() error
 	Cleanup() error
-	InitCleanupJobs(*time.Time) error
-	SetIsReady()
 	IsReady() bool
+	BlockUntilReady()
 	Invoke(w http.ResponseWriter, r *http.Request)
 }

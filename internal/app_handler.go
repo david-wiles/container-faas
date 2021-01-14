@@ -38,14 +38,21 @@ func (AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := waitForReady(app); err != nil {
-		G.Logger.LogError(err)
-		HTTPError(w, err.Error(), 500)
+	// Hopefully the client will quit waiting if there is a problem
+	// This state probably won't happen since we create the app just before this line
+	// and return an error message to the client if something goes wrong
+	app.Runner.BlockUntilReady()
+
+	trimLen := len("/app/" + app.ID)
+	if len(r.URL.Path) < trimLen {
+		G.Logger.Error("Invalid URL")
+		HTTPError(w, "Invalid URL", 404)
 		return
 	}
 
 	// Rewrite path and pass to proxy
-	urlRewrite, err := url.Parse(strings.ReplaceAll(r.URL.String(), "/app/"+app.Id, ""))
+	u := r.URL.String()[trimLen:]
+	urlRewrite, err := url.Parse(u)
 	if err != nil {
 		G.Logger.LogError(err)
 		HTTPError(w, err.Error(), 500)
@@ -54,36 +61,9 @@ func (AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxyRequest := r.Clone(context.Background())
 	proxyRequest.URL = urlRewrite
 
-	app.LastInvocation = time.Now()
+	G.AppMgr.Update(app.ID, func() *App {
+		app.LastInvocation = time.Now()
+		return app
+	})
 	app.Runner.Invoke(w, proxyRequest)
-}
-
-type containerStartError struct {
-	msg string
-}
-
-func (err *containerStartError) Error() string {
-	if err != nil {
-		return err.msg
-	} else {
-		return ""
-	}
-}
-
-// Once the container is running, it will make a request to the server's /healthz/<container> endpoint to indicate its
-// status. If this doesn't happen within a certain period of time, we should return an error
-func waitForReady(app *App) error {
-
-	start := time.Now()
-
-	for !app.Runner.IsReady() {
-		time.Sleep(time.Second)
-
-		if time.Now().After(start.Add(G.StartTimeout)) {
-			return &containerStartError{"Could not start the container"}
-		}
-	}
-
-	return nil
-
 }

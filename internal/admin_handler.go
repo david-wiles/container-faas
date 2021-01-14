@@ -75,16 +75,17 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if app, ok := G.AppMgr.Create(App{Id: id}); ok {
-		app.Runner = NewDockerContainer(
-			reqBody.Image,
-			"",
-			id,
-			reqBody.Dir,
-			strings.Split(reqBody.Cmd, " "),
-			reqBody.Env,
-		)
-
+	if app, ok := G.AppMgr.Create(App{
+		ID: id,
+		Runner: NewDockerContainer(
+			id,                              // docker id
+			reqBody.Image,                   // docker image
+			id,                              // app id
+			reqBody.Dir,                     // mounted dir
+			strings.Split(reqBody.Cmd, " "), // start command
+			reqBody.Env,                     // environment variables
+		),
+	}); ok {
 		if err := app.Init(); err != nil {
 			_ = app.Runner.Cleanup()
 			G.Logger.LogError(err)
@@ -92,12 +93,18 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := initAppIngress(app); err != nil {
+		u, err := initAppIngress(app)
+		if err != nil {
 			_ = G.Ingress.Remove(app)
 			G.Logger.LogError(err)
 			HTTPError(w, err.Error(), 500)
 			return
 		}
+
+		G.AppMgr.Update(app.ID, func() *App {
+			app.ExternalURL = u
+			return app
+		})
 
 		G.Logger.Info("Successfully built container")
 
@@ -149,16 +156,17 @@ func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func initAppIngress(app *App) error {
-	if err := G.Ingress.Write(app); err != nil {
-		return err
+func initAppIngress(app *App) (string, error) {
+	u, err := G.Ingress.Write(app)
+	if err != nil {
+		return "", err
 	}
 
 	if err := G.Ingress.Reload(); err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	return u, nil
 }
 
 func removeAppIngress(app *App) error {

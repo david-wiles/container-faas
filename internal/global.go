@@ -3,16 +3,14 @@ package internal
 import (
 	"flag"
 	"github.com/docker/docker/client"
-	"github.com/robfig/cron/v3"
 	"os"
+	"sync"
 	"time"
 )
 
 type Global struct {
 	AppMgr *DefaultAppManager
 	Logger *Logger
-
-	Jobs *cron.Cron
 
 	Docker *client.Client
 
@@ -26,10 +24,11 @@ type Global struct {
 
 // Parse all arguments. Passed arguments take precedence over environment variables
 func FromEnv() (*Global, error) {
-	addrPtr := flag.String("addr", "", "Address used to listen for connections")
-	stopTimeoutPtr := flag.String("stop-timeout", "", "Amount of time to wait for a container to stop")
-	containerStartTimeout := flag.String("start-timeout", "", "Amount of time to wait for a container to start")
-	dockerNetwork := flag.String("network", "", "Name of the docker network the app containers are placed in")
+	addrPtr := flag.String("addr", ":3000", "Address used to listen for connections")
+	stopTimeoutPtr := flag.String("stop-timeout", "15s", "Amount of time to wait for a container to stop")
+	containerStartTimeout := flag.String("start-timeout", "15s", "Amount of time to wait for a container to start")
+	dockerNetwork := flag.String("network", "app-network", "Name of the docker network the app containers are placed in. "+
+		"This will be moved into runner-specific configuration soon.")
 	useNginx := flag.Bool("nginx", false, "Indicates whether the program will run behind an nginx proxy")
 	logLevel := flag.Int("log", 0, "Log level. 0 indicates all logs, 4 indicates none")
 
@@ -74,14 +73,12 @@ func FromEnv() (*Global, error) {
 		return nil, err
 	}
 
-	if *useNginx {
+	if *useNginx || os.Getenv("USE_NGINX") == "1" {
 		ingress = &NginxPorts{
-			"/etc/nginx/apps",
-			[100]bool{},
-			make(map[string]struct {
-				port int
-				file string
-			}),
+			NginxAppDir: "/etc/nginx/apps",
+			confMu:      &sync.Mutex{},
+			ports:       [100]bool{},
+			apps:        make(map[string]confPortEntry),
 		}
 	} else {
 		ingress = &NoIngress{}
@@ -89,14 +86,14 @@ func FromEnv() (*Global, error) {
 
 	return &Global{
 		AppMgr: &DefaultAppManager{
-			apps: make(map[string]*App),
+			apps:  make(map[string]*App),
+			appMu: &sync.Mutex{},
 		},
 		Logger: &Logger{
 			infoLog:  os.Stdout,
 			errorLog: os.Stderr,
 			level:    LogLevel(*logLevel),
 		},
-		Jobs:          cron.New(),
 		Docker:        docker,
 		Addr:          addr,
 		StopTimeout:   dockerStopTimeout,
