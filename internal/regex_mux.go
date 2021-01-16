@@ -5,11 +5,15 @@ import (
 	"regexp"
 )
 
+// RegexMux is a muxer that uses regex to determine if a
+// request should be handled by the given handler function
+// For a limited number of routes, this should be efficient enough
 type RegexMux struct {
 	routes   []*route
 	NotFound http.Handler
 }
 
+// A route in this context is the compiled regexp along with the handle func
 type route struct {
 	pattern *regexp.Regexp
 	handler http.Handler

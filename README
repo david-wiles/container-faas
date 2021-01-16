@@ -7,7 +7,11 @@ To start the server without the nginx reverse proxy:
 docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:8080 --network app-network --rm paas-server
 
 With nginx:
-docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:80 -p 5000-6000:5000-6000/tcp --network app-network --rm paas-server-nginx
+docker build -t paas-server-nginx . && docker run -p 8080:80 -v /var/run/docker.sock:/var/run/docker.sock --env USE_NGINX=1 -p 5000-5100:5000-5100/tcp --network app-network paas-server-nginx
+
+############################################################################################################################################
+
+API:
 
 /admin/<app id>
     GET - get data about this app
@@ -25,8 +29,3 @@ docker run -v /var/run/docker.sock:/var/run/docker.sock --env-file .env -p 8080:
 /app/<app id>
     * - inform the server that this app has received a request and route the request to the app. Upon receiving
         a response, we route it back to the user
-
-/health/<app id>
-    GET - informs the server that the specified app is running. Should not be used by any client other than
-           the app itself
-

@@ -15,7 +15,7 @@ func (AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if len(parts) < 3 {
 		G.Logger.Warning("Invalid request: " + r.URL.Path)
-		HTTPError(w, "Container not found", 404)
+		ErrorResponse(w, "Container not found", 404)
 		return
 	}
 
@@ -24,7 +24,7 @@ func (AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	app, ok := G.AppMgr.Get(id)
 	if !ok {
 		G.Logger.Warning("App not found")
-		HTTPError(w, "App not found", 404)
+		ErrorResponse(w, "App not found", 404)
 		return
 	}
 
@@ -33,7 +33,7 @@ func (AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err := app.Runner.Create(); err != nil {
 			_ = app.Runner.Cleanup()
 			G.Logger.LogError(err)
-			HTTPError(w, err.Error(), 500)
+			ErrorResponse(w, err.Error(), 500)
 			return
 		}
 	}
@@ -46,7 +46,7 @@ func (AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	trimLen := len("/app/" + app.ID)
 	if len(r.URL.Path) < trimLen {
 		G.Logger.Error("Invalid URL")
-		HTTPError(w, "Invalid URL", 404)
+		ErrorResponse(w, "Invalid URL", 404)
 		return
 	}
 
@@ -55,7 +55,7 @@ func (AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	urlRewrite, err := url.Parse(u)
 	if err != nil {
 		G.Logger.LogError(err)
-		HTTPError(w, err.Error(), 500)
+		ErrorResponse(w, err.Error(), 500)
 		return
 	}
 	proxyRequest := r.Clone(context.Background())

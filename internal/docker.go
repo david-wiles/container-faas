@@ -1,5 +1,9 @@
 package internal
 
+// docker.go implements the AppRunner interface to allow for
+// apps to use Docker containers as the run platform
+// This serves as a wrapper around the docker API so that this
+// app server's API can abstract most of the details of the container
 import (
 	"context"
 	"errors"
@@ -47,6 +51,11 @@ func NewDockerContainer(appID, image, dockerName, dir string, cmd, env []string)
 	}
 }
 
+// Create and start the docker container as well as set up
+// jobs to manage the container. The container will be stopped
+// after 1 minute of inactivity and will be removed after 15 minutes.
+// It will also check every second whether the container is running
+// by sending a request to port 9003.
 func (d *DockerContainerRunner) Create() error {
 	if err := d.create(); err != nil {
 		return err
@@ -56,11 +65,13 @@ func (d *DockerContainerRunner) Create() error {
 		return err
 	}
 
+	// health check
 	startJob, err := d.jobs.AddFunc("@every 1s", d.checkIsRunning)
 	if err != nil {
 		return err
 	}
 
+	// Stop after inactivity
 	stopJob, err := d.jobs.AddFunc("@every 1m", func() {
 		app, _ := G.AppMgr.Get(d.appID)
 		cutoff := time.Now().Add(-time.Minute * 15)
@@ -76,6 +87,7 @@ func (d *DockerContainerRunner) Create() error {
 		return err
 	}
 
+	// Evict after long period of inactivity
 	removeJob, err := d.jobs.AddFunc("@every 15m", func() {
 		app, _ := G.AppMgr.Get(d.appID)
 		cutoff := time.Now().Add(-time.Hour)
@@ -110,6 +122,9 @@ func (d *DockerContainerRunner) Create() error {
 	return nil
 }
 
+// Cleanup will remove everything related to the specified container.
+// The container will be stopped and removed, and any jobs related
+// to the container will also be removed from the job queue
 func (d *DockerContainerRunner) Cleanup() error {
 	d.jobs.Stop()
 	d.jobHandles = make(map[string]cron.EntryID)
@@ -127,6 +142,9 @@ func (d *DockerContainerRunner) Cleanup() error {
 		return err
 	}
 
+	d.jobs.Stop()
+	d.jobHandles = make(map[string]cron.EntryID)
+
 	return nil
 }
 
@@ -135,8 +153,9 @@ func (d *DockerContainerRunner) IsReady() bool {
 }
 
 func (d *DockerContainerRunner) BlockUntilReady() {
-	// If d.ready has been closed, then this will return without blocking
-	<-d.ready
+	if !d.IsRunning {
+		<-d.ready
+	}
 }
 
 func (d *DockerContainerRunner) Invoke(w http.ResponseWriter, r *http.Request) {

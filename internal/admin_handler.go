@@ -1,13 +1,23 @@
+// admin_handler.go
+// Implementation of admin routes on the application server
+// The logic in this file creates, deletes, and gets the status
+// of apps at a high level.
+//
+// A more detailed of the usage of these routes can be found in the README
 package internal
 
 import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type AdminHandler struct{}
 
+// Splits actions based on the HTTP method
+// Each method will use a different function since there is little shared
+// functionality between the intended action of verbs
 func (h AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
@@ -17,14 +27,16 @@ func (h AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "DELETE":
 		h.delete(w, r)
 	default:
-		HTTPError(w, "HTTP Method not supported", 400)
+		ErrorResponse(w, "HTTP Method not supported", 400)
 	}
 }
 
+// Get information about a specific app, based on the id passed in the route
+// If the app does not exist, a 404 message is returned along with a readable message
 func (AdminHandler) get(w http.ResponseWriter, r *http.Request) {
 	id, err := trimPath("/admin/", r)
 	if err != nil {
-		HTTPError(w, "Resource not found", 404)
+		BasicResponse(w, "Resource not found", 404)
 		return
 	}
 
@@ -32,7 +44,7 @@ func (AdminHandler) get(w http.ResponseWriter, r *http.Request) {
 		b, err := json.Marshal(app)
 		if err != nil {
 			G.Logger.LogError(err)
-			HTTPError(w, err.Error(), 500)
+			ErrorResponse(w, err.Error(), 500)
 			return
 		}
 
@@ -40,7 +52,7 @@ func (AdminHandler) get(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(b)
 	} else {
 		G.Logger.Warning("App not found: " + id)
-		HTTPError(w, "App not found", 404)
+		BasicResponse(w, "App not found", 404)
 	}
 }
 
@@ -51,32 +63,40 @@ type containerPostRequest struct {
 	Env   []string `json:"env"`
 }
 
+// POSTing a message to this route will create a new app based on the parameters
+// in the request body. The app will be created and started, and if the service
+// uses an ingress server then it will be re-configured to serve the new app.
+// If any errors occur during app creation, then the app will be cleaned up
+// to prevent bad or inconsistent states
 func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
-	// Parse request body
-	reqBody := &containerPostRequest{}
 
 	id, err := trimPath("/admin/", r)
 	if err != nil {
-		HTTPError(w, "Resource not found", 404)
+		BasicResponse(w, "Resource not found", 404)
 		return
 	}
 
 	if _, ok := G.AppMgr.Get(id); ok {
-		HTTPError(w, "Container already exists", 200)
+		BasicResponse(w, "Container already exists", 200)
 		return
 	}
 
+	// Parse request body
+	reqBody := &containerPostRequest{}
 	defer r.Body.Close()
 	decoder := json.NewDecoder(r.Body)
 	err = decoder.Decode(reqBody)
 	if err != nil {
 		G.Logger.LogError(err)
-		HTTPError(w, "Could not parse request body: "+err.Error(), 500)
+		ErrorResponse(w, "Could not parse request body: "+err.Error(), 500)
 		return
 	}
 
-	if app, ok := G.AppMgr.Create(App{
-		ID: id,
+	// Create the app in the app management service
+	if app, ok := G.AppMgr.Create(&App{
+		ID:             id,
+		LastInvocation: time.Unix(0, 0),
+		frontendURL:    "http://" + G.Addr + "/app/" + id,
 		Runner: NewDockerContainer(
 			id,                              // docker id
 			reqBody.Image,                   // docker image
@@ -86,18 +106,20 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 			reqBody.Env,                     // environment variables
 		),
 	}); ok {
+		// Initialize, create, and start the app
 		if err := app.Init(); err != nil {
 			_ = app.Runner.Cleanup()
 			G.Logger.LogError(err)
-			HTTPError(w, err.Error(), 500)
+			ErrorResponse(w, err.Error(), 500)
 			return
 		}
 
+		// Create ingress for the app
 		u, err := initAppIngress(app)
 		if err != nil {
 			_ = G.Ingress.Remove(app)
 			G.Logger.LogError(err)
-			HTTPError(w, err.Error(), 500)
+			ErrorResponse(w, err.Error(), 500)
 			return
 		}
 
@@ -111,7 +133,7 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 		b, err := json.Marshal(app)
 		if err != nil {
 			G.Logger.LogError(err)
-			HTTPError(w, err.Error(), 500)
+			ErrorResponse(w, err.Error(), 500)
 			return
 		}
 
@@ -120,28 +142,31 @@ func (AdminHandler) post(w http.ResponseWriter, r *http.Request) {
 	} else {
 		G.AppMgr.Delete(id)
 		G.Logger.LogError(err)
-		HTTPError(w, err.Error(), 500)
+		ErrorResponse(w, err.Error(), 500)
 		return
 	}
 }
 
+// Deletes any app specified and removes it from the service
 func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
 	id, err := trimPath("/admin/", r)
 	if err != nil {
-		HTTPError(w, "Resource not found", 404)
+		ErrorResponse(w, "Resource not found", 404)
 		return
 	}
 
 	if app, ok := G.AppMgr.Get(id); ok {
+		// Remove the app's runner
 		if err = app.Runner.Cleanup(); err != nil {
 			G.Logger.LogError(err)
-			HTTPError(w, err.Error(), 500)
+			ErrorResponse(w, err.Error(), 500)
 			return
 		}
 
+		// Remove the app's ingress
 		if err = removeAppIngress(app); err != nil {
 			G.Logger.LogError(err)
-			HTTPError(w, err.Error(), 500)
+			ErrorResponse(w, err.Error(), 500)
 			return
 		}
 
@@ -151,11 +176,12 @@ func (AdminHandler) delete(w http.ResponseWriter, r *http.Request) {
 
 	} else {
 		G.Logger.Warning("Container not found")
-		HTTPError(w, "Resource not found", 404)
+		ErrorResponse(w, "Resource not found", 404)
 		return
 	}
 }
 
+// Write and reload app ingress. If NoIngress is used, this is a nop
 func initAppIngress(app *App) (string, error) {
 	u, err := G.Ingress.Write(app)
 	if err != nil {
@@ -169,6 +195,7 @@ func initAppIngress(app *App) (string, error) {
 	return u, nil
 }
 
+// Removes and resets app ingress without the specified app
 func removeAppIngress(app *App) error {
 	if err := G.Ingress.Remove(app); err != nil {
 		return err

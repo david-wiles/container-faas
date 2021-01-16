@@ -1,5 +1,11 @@
 package internal
 
+// ingress.go
+// This file contains details of the interaction between the service
+// and any ingress service for the app. The default is NoIngress, meaning
+// that the apps hosted using the service can be accessed using the /app/[id]
+// endpoint only. Adding an ingress service will allow a reverse proxy for
+// the apps, which could enable each app to have a unique subdomain or port number
 import (
 	"errors"
 	"math/rand"
@@ -18,6 +24,7 @@ type IngressServer interface {
 	Reload() error              // Activates the new ingress settings
 }
 
+// NoIngress: there is no reverse proxy or ingress service in front of this application server
 type NoIngress struct{}
 
 func (NoIngress) Write(a *App) (string, error) { return a.frontendURL, nil }
@@ -25,6 +32,8 @@ func (NoIngress) Remove(*App) error            { return nil }
 func (NoIngress) Reload() error                { return nil }
 
 // NginxPorts represents an Nginx reverse proxy that uses a different port for each app
+// The size of the number of ports could be configurable, but since a script would need to be set up
+// to create the Nginx container using the same port range, it is easiest for tests to keep it at 100
 type NginxPorts struct {
 	NginxAppDir string
 	confMu      *sync.Mutex

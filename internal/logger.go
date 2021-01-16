@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -16,22 +18,23 @@ const (
 	logLevelOff   LogLevel = 3
 )
 
-type Logger struct {
-	infoLog  io.Writer
-	errorLog io.Writer
-	level    LogLevel
-}
-
+// loggedResponseWriter implements http.ResponseWriter, but records
+// anything written to it so that it can be recorded for logging
+// or caching.
+// TODO make this configurable based on log level to prevent unnecessary duplicated writes
 type loggedResponseWriter struct {
 	http.ResponseWriter
+	recorder io.Writer
 	status   int
 	headers  http.Header
 	reqStart time.Time
 }
 
-func logResponseWriter(w http.ResponseWriter) *loggedResponseWriter {
+// Create a new loggedResponseWriter using the given ResponseWriter
+func logResponseWriter(w http.ResponseWriter, buf *bytes.Buffer) *loggedResponseWriter {
 	return &loggedResponseWriter{
 		ResponseWriter: w,
+		recorder:       buf,
 		status:         200,
 		reqStart:       time.Now(),
 	}
@@ -42,12 +45,34 @@ func (l *loggedResponseWriter) Header() http.Header {
 }
 
 func (l *loggedResponseWriter) Write(b []byte) (int, error) {
-	return l.ResponseWriter.Write(b)
+	n, err := l.ResponseWriter.Write(b)
+	if err != nil {
+		return n, err
+	}
+	m, err := l.recorder.Write(b)
+	if err != nil {
+		return n, err
+	}
+
+	if n != m {
+		return 0, errors.New("loggedResponseWriter didn't write the same number of bytes")
+	}
+
+	return n, nil
 }
 
 func (l *loggedResponseWriter) WriteHeader(statusCode int) {
 	l.ResponseWriter.WriteHeader(statusCode)
 	l.status = statusCode
+}
+
+// Logger is just a basic logger
+// It will write messages to an error logger or an info logger
+// The log level is configurable to prevent an overload
+type Logger struct {
+	infoLog  io.Writer
+	errorLog io.Writer
+	level    LogLevel
 }
 
 func (log Logger) LogRequests(next http.Handler) http.Handler {
@@ -56,7 +81,8 @@ func (log Logger) LogRequests(next http.Handler) http.Handler {
 			if log.level > 0 {
 				next.ServeHTTP(w, r)
 			} else {
-				loggedWriter := logResponseWriter(w)
+				var buf bytes.Buffer
+				loggedWriter := logResponseWriter(w, &buf)
 				next.ServeHTTP(loggedWriter, r)
 				log.LogAccess(loggedWriter, r)
 			}

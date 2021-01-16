@@ -17,11 +17,9 @@ func main() {
 		NotFound: internal.G.Logger.LogRequests(&internal.NotFoundHandler{}),
 	}
 
-	// Set up http handlers
 	mux.Handle("/admin/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.AdminHandler{}))
 	mux.Handle("/app/[a-zA-Z0-9_-]+", internal.G.Logger.LogRequests(&internal.AppHandler{}))
 
-	// Create accepting connections
 	internal.G.Logger.Info("Listening for requests on " + internal.G.Addr)
 	err = http.ListenAndServe(internal.G.Addr, mux)
 	if err != nil {

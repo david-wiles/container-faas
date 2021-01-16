@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// Global contains all global variables and program configuration settings
 type Global struct {
 	AppMgr *DefaultAppManager
 	Logger *Logger
