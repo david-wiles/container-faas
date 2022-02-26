@@ -15,6 +15,3 @@ walk_dir() {
 
 # build all docker images in the assets/dockerfiles/ directory
 walk_dir "../assets/dockerfiles"
-
-# Create a network
-docker network create app-network
